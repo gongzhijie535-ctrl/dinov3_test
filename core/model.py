@@ -17,13 +17,21 @@ from core.config import (
 _model  = None
 _clf    = None
 _scaler = None
+_device = torch.device("cpu")
 
 
-def load_model():
+def load_model(device: str = "cuda"):
     """启动时调用，同时加载 DINOv3 + 分割头"""
-    global _model, _clf, _scaler
+    global _model, _clf, _scaler, _device
 
     print("正在加载 DINOv3 模型...")
+    if device == "cuda" and torch.cuda.is_available():
+        _device = torch.device("cuda")
+    elif device == "cuda":
+        print("CUDA 不可用，自动回退到 CPU")
+        _device = torch.device("cpu")
+    else:
+        _device = torch.device(device)
 
     sys.path.insert(0, os.path.dirname(REPO_DIR))  # dinov3_test/
     sys.path.insert(0, REPO_DIR)                    # dinov3_test/dinov3/
@@ -31,8 +39,9 @@ def load_model():
     _model = torch.hub.load(
         REPO_DIR, 'dinov3_vitb16', source='local', weights=WEIGHTS
     )
+    _model = _model.to(_device)
     _model.eval()
-    print("DINOv3 加载成功")
+    print(f"DINOv3 加载成功，当前 device: {_device}")
 
     print("正在加载前景分割头...")
     _clf    = joblib.load(CLF_PATH)
@@ -66,12 +75,12 @@ def load_and_extract(image_path, scale):
     tensor = TF.normalize(
         TF.to_tensor(Image.fromarray(img_resized)),
         IMAGENET_MEAN, IMAGENET_STD
-    ).unsqueeze(0)
+    ).unsqueeze(0).to(_device)
 
     with torch.no_grad():
         features = _model.get_intermediate_layers(tensor, n=1, return_class_token=True)
 
-    patch_tokens  = features[0][0].squeeze(0).numpy()
+    patch_tokens  = features[0][0].squeeze(0).detach().cpu().numpy()
     norms         = np.linalg.norm(patch_tokens, axis=1, keepdims=True) + 1e-8
     tokens_normed = patch_tokens / norms
 

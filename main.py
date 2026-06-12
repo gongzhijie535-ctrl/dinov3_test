@@ -15,7 +15,7 @@ def main():
     # ── 启动时加载模型 ──────────────────────────────
     def _do_load():
         """后台线程：加载模型"""
-        load_model()
+        load_model(device="cuda")
         # 加载完成后回到主线程解锁 UI
         root.after(0, _on_model_ready)
 
